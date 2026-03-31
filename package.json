@@ -1,0 +1,11 @@
+{
+  "name": "house-sama",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "ingest": "node scripts/ingest-redfin.mjs",
+    "refresh:sample": "node scripts/ingest-redfin.mjs https://redf.in/JAR82i",
+    "check": "node --check app.js && node --check scripts/serve.mjs && node --check scripts/ingest-redfin.mjs"
+  }
+}

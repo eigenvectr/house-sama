@@ -1,0 +1,45 @@
+name: Refresh Redfin Listings
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: Optional space-separated or newline-separated Redfin URLs to add or refresh
+        required: false
+        type: string
+  schedule:
+    - cron: "0 14 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Refresh listing data
+        env:
+          HOUSE_SAMA_URLS: ${{ inputs.urls }}
+        run: node scripts/ingest-redfin.mjs
+
+      - name: Commit data changes
+        run: |
+          if git diff --quiet -- data/listings.json; then
+            echo "No listing data changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/listings.json
+          git commit -m "Refresh Redfin listings"
+          git push
