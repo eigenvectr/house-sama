@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pages: write
@@ -28,6 +31,9 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          token: ${{ secrets.PAGES_ENABLEMENT_TOKEN != '' && secrets.PAGES_ENABLEMENT_TOKEN || github.token }}
+          enablement: ${{ secrets.PAGES_ENABLEMENT_TOKEN != '' }}
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v4
