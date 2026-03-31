@@ -1,54 +1,88 @@
 # house-sama
 
-House Sama is a GitHub Pages watchlist for Redfin listings.
+House Sama is a GitHub Pages house-evaluation pipeline for Redfin listings.
 
-It splits the product into two pieces:
+The app is built around a simple split:
 
-- a static front-end that reads `data/listings.json` and lets you filter, group, sort, and annotate homes in the browser
-- a repo-owned Redfin ingestion script that resolves shortened `redf.in` links, extracts property data, and updates the static JSON file
+- `data/listings.json` stores scraped listing facts from Redfin
+- browser `localStorage` stores the decision layer: pipeline stage, scores, commute, notes, visit context, and dad packet prep
 
-## Why this shape
+## Product shape
 
-GitHub Pages is static hosting. Redfin pages are not reliably fetchable from a browser app because of cross-origin rules and anti-bot defenses. The scraper therefore runs outside the browser, while the site itself stays simple and fast to host on Pages.
+This is not a bookmark app. Each listing moves through:
+
+- Interested
+- Scheduled
+- Visited
+- Send to Dad
+
+Every house is scored on:
+
+- commute to IBM Research Albany
+- photo / condition
+- neighborhood
+- price fit
+
+The board computes a weighted composite score and also supports a separate gut-feel override.
 
 ## Local workflow
 
 ```bash
-npm install
 npm start
 ```
 
 That serves the site at `http://localhost:4173`.
 
-To ingest or refresh listings:
+Refresh listings from Redfin:
 
 ```bash
 npm run ingest -- https://redf.in/JAR82i
 ```
 
-To seed the repo with the sample shortened Redfin URL from this thread:
+## File structure
 
-```bash
-npm run refresh:sample
+```text
+house-sama/
+├── index.html
+├── css/
+│   └── style.css
+├── js/
+│   ├── app.js
+│   ├── board.js
+│   ├── card.js
+│   ├── filters.js
+│   ├── scoring.js
+│   └── storage.js
+├── data/
+│   └── listings.json
+├── scripts/
+│   ├── ingest-redfin.mjs
+│   └── serve.mjs
+└── .github/workflows/
+    ├── deploy-pages.yml
+    └── refresh-listings.yml
 ```
 
-The script writes the normalized result into `data/listings.json`.
+## Current MVP
+
+- kanban pipeline board with four stages
+- drag-and-drop stage movement
+- composite fit scoring plus gut override
+- commute minutes visible at a glance
+- budget flag above the soft `$575k` warning threshold
+- pending / sold demotion
+- saved local view presets
+- seeded Capital Region listing sample
 
 ## Deployment
 
 The repo includes:
 
-- a GitHub Pages deployment workflow that publishes the static site on pushes to `main`
-- a Redfin refresh workflow that can be run manually, and can also refresh existing tracked URLs on a schedule
+- `deploy-pages.yml` to publish the site
+- `refresh-listings.yml` to ingest or refresh listings through GitHub Actions
 
-## Current feature set
+GitHub Pages must be enabled for the repository and configured to use `GitHub Actions` as the Pages source.
 
-- Redfin URL normalization, including `redf.in` short links
-- status extraction so `pending` and `sold` homes can be dimmed and pushed to the bottom
-- custom grouping and sorting in the UI
-- locally saved view presets
-- per-home local annotations: bucket, fit score, tags, notes
+## More detail
 
-## Architecture notes
-
-The detailed requirements and architecture draft live in [docs/architecture.md](/C:/Users/edmol/OneDrive/Desktop/house-sama/docs/architecture.md).
+The fuller architecture draft lives in [docs/architecture.md](./docs/architecture.md).

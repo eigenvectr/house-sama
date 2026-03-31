@@ -37,7 +37,7 @@ async function main() {
   const nextById = new Map(existingListings.map((listing) => [listing.id, listing]));
   let didChange = false;
 
-  for (const sourceUrl of uniqueTargets) {
+  for (const [index, sourceUrl] of uniqueTargets.entries()) {
     try {
       const scraped = await scrapeListing(sourceUrl);
       const existing = findExistingListing(existingListings, scraped);
@@ -54,6 +54,10 @@ async function main() {
       console.log(`Updated ${merged.title} [${merged.status}]`);
     } catch (error) {
       console.error(`Failed to ingest ${sourceUrl}: ${error.message}`);
+    }
+
+    if (index < uniqueTargets.length - 1) {
+      await delay(650);
     }
   }
 
@@ -104,15 +108,15 @@ async function scrapeListing(sourceUrl) {
     city: address.addressLocality ?? null,
     state: address.addressRegion ?? null,
     zip: address.postalCode ?? null,
-    latitude: numberOrNull(mainEntity.geo?.latitude),
-    longitude: numberOrNull(mainEntity.geo?.longitude),
+    lat: numberOrNull(mainEntity.geo?.latitude),
+    lng: numberOrNull(mainEntity.geo?.longitude),
     status: normalizeStatus(metadata.listingStatus),
     price: numberOrNull(listingJsonLd.offers?.price),
     beds: numberOrNull(mainEntity.numberOfBedrooms),
     baths: numberOrNull(mainEntity.numberOfBathroomsTotal),
     sqft: numberOrNull(mainEntity.floorSize?.value),
     yearBuilt: numberOrNull(mainEntity.yearBuilt),
-    propertyType: cleanText(metadata.propertyType ?? mainEntity.accommodationCategory ?? ""),
+    propertyType: titleCase(cleanText(metadata.propertyType ?? mainEntity.accommodationCategory ?? "")),
     description: cleanText(listingJsonLd.description ?? ""),
     heroImage: images[0] ?? null,
     gallery: images,
@@ -122,15 +126,22 @@ async function scrapeListing(sourceUrl) {
 }
 
 function mergeListing(existing, scraped, sourceUrl) {
+  const {
+    latitude,
+    longitude,
+    fitScore,
+    bucket,
+    notes,
+    tags,
+    ...restExisting
+  } = existing ?? {};
+
   return {
-    ...existing,
+    ...restExisting,
     ...scraped,
     sourceUrl: existing?.sourceUrl ?? sourceUrl,
     addedAt: existing?.addedAt ?? new Date().toISOString(),
-    tags: Array.isArray(existing?.tags) ? existing.tags : [],
-    fitScore: numberOrNull(existing?.fitScore),
-    bucket: existing?.bucket ?? "",
-    notes: existing?.notes ?? "",
+    commuteMinutesHint: numberOrNull(existing?.commuteMinutesHint),
   };
 }
 
@@ -285,6 +296,18 @@ function sortListings(left, right) {
   }
 
   return String(left.title ?? "").localeCompare(String(right.title ?? ""));
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function titleCase(text) {
+  return String(text ?? "")
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function escapeRegExp(value) {

@@ -1,61 +1,56 @@
 # House Sama Architecture
 
-## Product target
+## Product intent
 
-Build a visually opinionated house-tracking app on GitHub Pages that turns scattered Redfin links into a sortable shortlist.
+House Sama is a pipeline-native house evaluation app. The goal is not to collect listings. The goal is to narrow them to a confident shortlist and send finalists to dad with a clearer case.
 
-## Non-negotiable requirements
+Core principles:
 
-- resolve both canonical Redfin URLs and shortened `redf.in` URLs
-- pull listing status and visually demote `pending` or `sold` homes
-- support better organization than a flat list
-- allow custom views and stronger grouping controls
-- keep the UI deliberate, editorial, and spatially expressive instead of default dashboard boilerplate
+- opinionated evaluation over passive bookmarking
+- commute, condition, neighborhood, and price fit are explicit dimensions
+- GitHub Pages hosts the app, but Redfin scraping happens outside the browser
 
-## Constraints
+## Runtime split
 
-- GitHub Pages is static hosting
-- Redfin data is not dependable from in-browser `fetch()` calls because of CORS and anti-bot behavior
-- user-authored organization data needs a persistence story separate from the static hosting layer
+### 1. Static front-end
 
-## Chosen architecture
+The site is a static app served on GitHub Pages.
 
-### 1. Static front-end on GitHub Pages
+It renders:
 
-The site reads `data/listings.json` and renders:
+- a four-stage kanban board
+- dense listing cards with hero images and score bars
+- a side editor for scoring, notes, visit details, and dad packet prep
+- saved local views for sorting the pipeline in different ways
 
-- a grouped listing board
-- status-aware card styling
-- custom sort and grouping controls
-- saved local view presets
-- per-card local notes, tags, bucket, and fit score
+### 2. Repo-owned ingest
 
-This keeps the public app extremely cheap to host and easy to deploy.
+Redfin ingestion is handled by `scripts/ingest-redfin.mjs`.
 
-### 2. Repo-owned ingestion pipeline
+It:
 
-Redfin scraping runs outside the browser through `scripts/ingest-redfin.mjs`.
+- resolves shortened `redf.in` links
+- fetches listing HTML with browser-like headers
+- extracts status from `xdp-meta`
+- extracts listing facts and gallery images from JSON-LD
+- writes normalized listing records to `data/listings.json`
 
-Responsibilities:
+### 3. Local decision state
 
-- follow redirects from shortened `redf.in` links
-- fetch the final Redfin listing page with browser-like headers
-- extract listing status from `xdp-meta`
-- extract property facts from the embedded JSON-LD `RealEstateListing`
-- merge results back into `data/listings.json`
+All personal evaluation state stays in browser storage for the MVP:
 
-### 3. GitHub Actions bridge
+- pipeline stage
+- commute minutes
+- 1–5 dimension scores
+- 1–10 gut override
+- notes, tags, visit notes, next action
+- sent-to-dad summary and verdict
 
-Two workflows close the loop:
+That keeps deployment simple and avoids trying to fake multi-user persistence on a static host.
 
-- `deploy-pages.yml`: publishes the static site
-- `refresh-listings.yml`: refreshes existing listings or adds new ones from manual input
+## Listing data model
 
-That gives the project a lightweight “static app + background refresh” model without standing up a backend.
-
-## Data model
-
-Each listing in `data/listings.json` is shaped for both machine refreshes and UI-level organization:
+Repo-owned listing records are facts, not opinions:
 
 ```json
 {
@@ -68,6 +63,8 @@ Each listing in `data/listings.json` is shaped for both machine refreshes and UI
   "city": "Delmar",
   "state": "NY",
   "zip": "12054",
+  "lat": 42.6137796,
+  "lng": -73.828765,
   "status": "pending",
   "price": 549900,
   "beds": 4,
@@ -79,40 +76,50 @@ Each listing in `data/listings.json` is shaped for both machine refreshes and UI
   "heroImage": "https://...",
   "gallery": ["https://..."],
   "addedAt": "2026-03-31T...",
-  "refreshedAt": "2026-03-31T..."
+  "refreshedAt": "2026-03-31T...",
+  "commuteMinutesHint": 18
 }
 ```
 
-Local organization state currently lives in browser storage:
+## Fit score model
 
-- `bucket`
-- `fitScore`
-- `notes`
-- `tags`
-- saved view presets
+Composite fit score uses weighted 1–5 inputs:
+
+- commute: 0.30
+- photo / condition: 0.25
+- neighborhood: 0.25
+- price fit: 0.20
+
+The app also supports a separate 1–10 override for instinct.
+
+Budget logic:
+
+- `$550k` is the soft reference point
+- listings above `$575k` get an `Above Range` flag
+- they remain sortable and fully evaluable
 
 ## UI direction
 
-The visual direction follows the spirit of [Pretext](https://github.com/chenglou/pretext) rather than a standard admin dashboard:
+The current UI direction follows the editorial/masonry feel from [Pretext](https://github.com/chenglou/pretext), adapted for a real estate pipeline:
 
-- oversized editorial typography
-- asymmetrical panels instead of repetitive widget grids
-- layered backgrounds and depth cues
-- calm neutrals with a few sharp accent colors
-- dense but readable cards that reward scanning
+- oversized serif headings
+- asymmetric board proportions
+- warm neutral palette with teal / amber / sage accents
+- photo-forward cards
+- status demotion for pending and sold listings
+- compact score micro-bars for at-a-glance scanning
 
-## MVP in this repo
+## Constraints
 
-- static site scaffold
-- Redfin ingest script
-- sample seeded data from the provided short URL
-- Pages deploy workflow
-- manual/scheduled refresh workflow
+- GitHub Pages is static hosting only
+- browser-side Redfin fetches are off-limits because of CORS and anti-bot behavior
+- localStorage is device-local
+- Redfin image hotlinks may decay over time
 
-## Next slices
+## Next likely upgrades
 
-- map and commute overlays
-- comparable sales lane
-- import from CSV or browser extension capture
-- shared annotations backed by GitHub Issues, Supabase, or another lightweight API
-- change detection digest when a listing flips to pending, sold, or drops in price
+- commute auto-calculation with a maps API
+- map overlay
+- lightbox photo review
+- change detection for price drops and status changes
+- shared state beyond localStorage

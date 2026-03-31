@@ -6,7 +6,7 @@
     <title>House Sama</title>
     <meta
       name="description"
-      content="A static GitHub Pages watchlist for Redfin homes with status refreshes, custom views, and sharper visual hierarchy."
+      content="A GitHub Pages house-evaluation pipeline for Redfin listings, built around commute, condition, neighborhood, and price fit."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,20 +14,20 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./css/style.css" />
   </head>
   <body>
-    <div class="page-haze" aria-hidden="true"></div>
+    <div class="page-aura" aria-hidden="true"></div>
     <div class="page-grain" aria-hidden="true"></div>
 
-    <main class="shell">
+    <main class="page-shell">
       <section class="hero panel">
         <div class="hero-copy">
-          <p class="eyebrow">GitHub Pages Watchlist</p>
-          <h1>House Sama turns scattered Redfin links into a living shortlist.</h1>
+          <p class="eyebrow">House Sama / GitHub Pages</p>
+          <h1>Evaluate every house like it might become the one.</h1>
           <p class="hero-lead">
-            Resolve shortened URLs, refresh listing status, and keep pending or sold homes out of
-            the way without losing the full trail.
+            Commute to IBM Research Albany. Photo condition. Neighborhood feel. Price fit. Each
+            listing moves through a decision pipeline, not a bookmark pile.
           </p>
 
           <div class="hero-actions">
@@ -37,7 +37,7 @@
               target="_blank"
               rel="noreferrer"
             >
-              Open GitHub Actions
+              Refresh Listings
             </a>
             <a class="button button-ghost" href="./docs/architecture.md">Read Architecture</a>
           </div>
@@ -47,66 +47,39 @@
       </section>
 
       <section class="workspace">
-        <aside class="rail panel">
+        <aside class="control-rail panel">
           <div class="section-head">
             <div>
               <p class="eyebrow">Control Surface</p>
-              <h2>Views</h2>
+              <h2>Views and sort</h2>
             </div>
             <button class="button button-ghost button-tight" id="save-view-button" type="button">
-              Save current view
+              Save view
             </button>
           </div>
 
-          <form id="controls-form" class="controls">
+          <form class="controls" id="controls-form">
             <label class="control">
               <span>Search</span>
-              <input
-                id="search-input"
-                name="search"
-                type="search"
-                placeholder="Search address, note, tag, status"
-              />
+              <input id="search-input" type="search" placeholder="Address, notes, tag, school, vibe" />
             </label>
 
             <div class="control-grid">
               <label class="control">
-                <span>Status</span>
-                <select id="status-filter" name="statusFilter">
-                  <option value="all">All</option>
-                  <option value="active">Active only</option>
-                  <option value="inactive">Pending / sold only</option>
-                  <option value="pending">Pending</option>
-                  <option value="sold">Sold</option>
-                </select>
-              </label>
-
-              <label class="control">
-                <span>Group by</span>
-                <select id="group-by" name="groupBy">
-                  <option value="status">Status</option>
-                  <option value="bucket">Bucket</option>
-                  <option value="city">City</option>
-                  <option value="none">None</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="control-grid">
-              <label class="control">
-                <span>Sort by</span>
-                <select id="sort-by" name="sortBy">
-                  <option value="freshness">Freshness</option>
-                  <option value="fit-high">Fit score</option>
+                <span>Sort within stages</span>
+                <select id="sort-by">
+                  <option value="composite">Composite score</option>
+                  <option value="gut">Gut override</option>
+                  <option value="commute">Commute</option>
                   <option value="price-low">Price low to high</option>
                   <option value="price-high">Price high to low</option>
-                  <option value="size-high">Square feet</option>
+                  <option value="freshness">Freshness</option>
                 </select>
               </label>
 
               <label class="toggle">
-                <input id="pin-inactive" name="pinInactive" type="checkbox" checked />
-                <span>Pin pending / sold to the bottom</span>
+                <input id="show-inactive" type="checkbox" checked />
+                <span>Show pending / sold listings</span>
               </label>
             </div>
           </form>
@@ -122,30 +95,45 @@
           </section>
 
           <section class="pipeline-note">
-            <p class="eyebrow">Pipeline</p>
-            <h2>Redfin refresh flow</h2>
-            <ol>
-              <li>Run `npm run ingest -- &lt;redfin-url&gt;` locally or trigger the workflow.</li>
-              <li>The script resolves short links and refreshes `data/listings.json`.</li>
-              <li>Push to `main` and GitHub Pages deploys the updated board.</li>
-            </ol>
+            <p class="eyebrow">Pipeline-native</p>
+            <h2>How the board works</h2>
+            <p>
+              Drag cards across stages. Open a house to score commute, photo condition,
+              neighborhood, and price fit. Houses above the $550k reference range get a subtle flag
+              but stay fully sortable.
+            </p>
+            <p>
+              All evaluation data stays local in your browser for the MVP. The repo only stores the
+              ingested listing facts.
+            </p>
           </section>
         </aside>
 
-        <section class="canvas">
-          <section class="board-intro panel">
+        <section class="board-area">
+          <section class="board-header panel">
             <div>
-              <p class="eyebrow">Listing board</p>
-              <h2>Homes organized for scanning</h2>
+              <p class="eyebrow">Primary view</p>
+              <h2>Interested → Scheduled → Visited → Send to Dad</h2>
             </div>
-            <p class="board-count" id="board-count">0 listings</p>
+            <p class="board-caption" id="board-caption">0 listings in pipeline</p>
           </section>
 
-          <div class="listing-groups" id="listing-groups"></div>
+          <div class="stage-tabs panel" id="stage-tabs"></div>
+          <div class="board-root" id="board-root"></div>
         </section>
       </section>
     </main>
 
-    <script type="module" src="./app.js"></script>
+    <aside class="editor-shell" id="editor-shell" data-open="false" aria-live="polite">
+      <div class="editor-panel">
+        <button class="editor-close" id="editor-close-button" type="button" aria-label="Close editor">
+          Close
+        </button>
+        <div id="editor-root"></div>
+      </div>
+    </aside>
+    <div class="editor-backdrop" id="editor-backdrop" hidden></div>
+
+    <script type="module" src="./js/app.js"></script>
   </body>
 </html>
