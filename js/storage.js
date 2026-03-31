@@ -24,6 +24,8 @@ export function loadLocalState() {
       savedViews: Array.isArray(parsed.savedViews) ? parsed.savedViews : [],
       activeViewKey: parsed.activeViewKey ?? "best-fit",
       view: { ...DEFAULT_VIEW, ...(parsed.view ?? {}) },
+      viewMode: parsed.viewMode ?? "board",
+      captureDraft: parsed.captureDraft ?? "",
     };
   } catch {
     return createEmptyLocalState();
@@ -40,6 +42,8 @@ export function createEmptyLocalState() {
     savedViews: [],
     activeViewKey: "best-fit",
     view: { ...DEFAULT_VIEW },
+    viewMode: "board",
+    captureDraft: "",
   };
 }
 
@@ -49,6 +53,8 @@ export function ensureLocalState(localState, listings) {
     savedViews: Array.isArray(localState?.savedViews) ? localState.savedViews : [],
     activeViewKey: localState?.activeViewKey ?? "best-fit",
     view: { ...DEFAULT_VIEW, ...(localState?.view ?? {}) },
+    viewMode: localState?.viewMode ?? "board",
+    captureDraft: localState?.captureDraft ?? "",
   };
 
   for (const listing of listings) {

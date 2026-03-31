@@ -129,6 +129,14 @@ export function getCommuteTone(minutes) {
   return "slow";
 }
 
+export function getScoreTone(value, scale = 5) {
+  if (!Number.isFinite(value)) return "muted";
+  const normalized = scale === 10 ? value / 2 : value;
+  if (normalized >= 4) return "high";
+  if (normalized >= 2.5) return "mid";
+  return "low";
+}
+
 export function formatCurrency(value) {
   if (!Number.isFinite(value)) return "n/a";
   return new Intl.NumberFormat("en-US", {

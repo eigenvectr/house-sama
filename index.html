@@ -6,133 +6,105 @@
     <title>House Sama</title>
     <meta
       name="description"
-      content="A GitHub Pages house-evaluation pipeline for Redfin listings, built around commute, condition, neighborhood, and price fit."
+      content="A GitHub Pages house evaluation pipeline for Redfin listings, tuned for commute, condition, neighborhood, and price fit."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./css/style.css" />
   </head>
   <body>
-    <div class="page-aura" aria-hidden="true"></div>
     <div class="page-grain" aria-hidden="true"></div>
 
     <main class="page-shell">
-      <section class="hero panel">
-        <div class="hero-copy">
-          <p class="eyebrow">House Sama / GitHub Pages</p>
-          <h1>Evaluate every house like it might become the one.</h1>
-          <p class="hero-lead">
-            Commute to IBM Research Albany. Photo condition. Neighborhood feel. Price fit. Each
-            listing moves through a decision pipeline, not a bookmark pile.
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">House Sama</p>
+          <h1>House Sama</h1>
+          <p class="topbar__lede">
+            Turn scattered Redfin links into a shortlist with actual conviction.
           </p>
-
-          <div class="hero-actions">
-            <a
-              class="button button-solid"
-              href="https://github.com/eigenvectr/house-sama/actions"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Refresh Listings
-            </a>
-            <a class="button button-ghost" href="./docs/architecture.md">Read Architecture</a>
-          </div>
         </div>
 
-        <div class="hero-metrics" id="hero-metrics"></div>
-      </section>
+        <form class="capture-bar" id="capture-form">
+          <label class="capture-field">
+            <span class="eyebrow">Paste Redfin link</span>
+            <input id="capture-input" type="url" placeholder="https://redf.in/JAR82i" autocomplete="off" />
+          </label>
+          <button class="button button-solid" type="submit">Prep refresh</button>
+        </form>
 
-      <section class="workspace">
-        <aside class="control-rail panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Control Surface</p>
-              <h2>Views and sort</h2>
-            </div>
-            <button class="button button-ghost button-tight" id="save-view-button" type="button">
-              Save view
-            </button>
-          </div>
+        <div class="view-toggle" id="view-toggle" role="tablist" aria-label="Views">
+          <button class="button button-ghost is-active" type="button" data-view-mode="board">Board</button>
+          <button class="button button-ghost" type="button" data-view-mode="list">List</button>
+          <button class="button button-ghost" type="button" data-view-mode="map">Map</button>
+        </div>
 
-          <form class="controls" id="controls-form">
-            <label class="control">
-              <span>Search</span>
-              <input id="search-input" type="search" placeholder="Address, notes, tag, school, vibe" />
+        <p class="capture-feedback" id="capture-feedback"></p>
+      </header>
+
+      <section class="overview-strip">
+        <div class="metric-ribbon" id="hero-metrics"></div>
+
+        <div class="utility-bar">
+          <div class="utility-bar__inputs">
+            <label class="utility-field utility-field--search">
+              <span class="eyebrow">Search</span>
+              <input id="search-input" type="search" placeholder="Address, notes, tags, district, vibe" />
             </label>
 
-            <div class="control-grid">
-              <label class="control">
-                <span>Sort within stages</span>
-                <select id="sort-by">
-                  <option value="composite">Composite score</option>
-                  <option value="gut">Gut override</option>
-                  <option value="commute">Commute</option>
-                  <option value="price-low">Price low to high</option>
-                  <option value="price-high">Price high to low</option>
-                  <option value="freshness">Freshness</option>
-                </select>
-              </label>
+            <label class="utility-field">
+              <span class="eyebrow">Sort</span>
+              <select id="sort-by">
+                <option value="composite">Composite score</option>
+                <option value="gut">Gut override</option>
+                <option value="commute">Commute</option>
+                <option value="price-low">Price low to high</option>
+                <option value="price-high">Price high to low</option>
+                <option value="freshness">Freshness</option>
+              </select>
+            </label>
 
-              <label class="toggle">
-                <input id="show-inactive" type="checkbox" checked />
-                <span>Show pending / sold listings</span>
-              </label>
-            </div>
-          </form>
+            <label class="toggle toggle--compact">
+              <input id="show-inactive" type="checkbox" checked />
+              <span>Show pending / sold</span>
+            </label>
+          </div>
 
-          <section class="saved-views-block">
-            <div class="section-head section-head-compact">
-              <div>
-                <p class="eyebrow">Presets</p>
-                <h2>Saved views</h2>
-              </div>
-            </div>
-            <div id="saved-views" class="saved-views"></div>
-          </section>
+          <div class="utility-bar__views">
+            <div class="saved-views" id="saved-views"></div>
+            <button class="button button-ghost" id="save-view-button" type="button">Save lens</button>
+          </div>
+        </div>
+      </section>
 
-          <section class="pipeline-note">
-            <p class="eyebrow">Pipeline-native</p>
-            <h2>How the board works</h2>
-            <p>
-              Drag cards across stages. Open a house to score commute, photo condition,
-              neighborhood, and price fit. Houses above the $550k reference range get a subtle flag
-              but stay fully sortable.
-            </p>
-            <p>
-              All evaluation data stays local in your browser for the MVP. The repo only stores the
-              ingested listing facts.
-            </p>
-          </section>
-        </aside>
+      <section class="board-head">
+        <div>
+          <p class="eyebrow">Pipeline board</p>
+          <h2>Interested / Scheduled / Visited / Send to Dad</h2>
+        </div>
+        <p class="board-caption" id="board-caption"></p>
+      </section>
 
-        <section class="board-area">
-          <section class="board-header panel">
-            <div>
-              <p class="eyebrow">Primary view</p>
-              <h2>Interested → Scheduled → Visited → Send to Dad</h2>
-            </div>
-            <p class="board-caption" id="board-caption">0 listings in pipeline</p>
-          </section>
+      <nav class="stage-tabs" id="stage-tabs" aria-label="Pipeline stages"></nav>
 
-          <div class="stage-tabs panel" id="stage-tabs"></div>
-          <div class="board-root" id="board-root"></div>
-        </section>
+      <section class="board-viewport" id="board-viewport">
+        <div class="board-root" id="board-root"></div>
       </section>
     </main>
 
-    <aside class="editor-shell" id="editor-shell" data-open="false" aria-live="polite">
-      <div class="editor-panel">
-        <button class="editor-close" id="editor-close-button" type="button" aria-label="Close editor">
+    <aside class="detail-shell" id="detail-shell" data-open="false" aria-live="polite">
+      <div class="detail-panel">
+        <button class="detail-close" id="detail-close-button" type="button" aria-label="Close packet">
           Close
         </button>
-        <div id="editor-root"></div>
+        <div id="detail-root"></div>
       </div>
     </aside>
-    <div class="editor-backdrop" id="editor-backdrop" hidden></div>
+    <div class="detail-backdrop" id="detail-backdrop" hidden></div>
 
     <script type="module" src="./js/app.js"></script>
   </body>

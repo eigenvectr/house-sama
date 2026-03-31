@@ -1,11 +1,10 @@
 import { renderBoard, renderStageTabs } from "./board.js";
-import { renderEditorPanel } from "./card.js";
+import { renderDetailPanel } from "./card.js";
 import { BUILTIN_VIEWS, buildBoardState, mergeListingWithEvaluation } from "./filters.js";
+import { buildMeasuredColumns, ensurePretextReady, measureDetailLayout } from "./pretext-layout.js";
 import {
   IBM_REFERENCE,
-  PIPELINE_STAGES,
   escapeHtml,
-  formatCurrency,
   formatMaybeScore,
   isInactiveStatus,
   nextStage,
@@ -14,23 +13,34 @@ import {
 import { cloneView, ensureLocalState, loadLocalState, parseTags, saveLocalState } from "./storage.js";
 
 const DATA_URL = "./data/listings.json";
+const REFRESH_WORKFLOW_URL =
+  "https://github.com/eigenvectr/house-sama/actions/workflows/refresh-listings.yml";
 
 const state = {
   listings: [],
   updatedAt: null,
   local: ensureLocalState(loadLocalState(), []),
   activeListingId: null,
+  expandedListingId: null,
   draggingId: null,
+  justMovedId: null,
+  captureFeedback: "GitHub Pages stays static. New URLs still go through the refresh workflow.",
 };
+
+let renderFrame = 0;
+let pulseTimer = 0;
 
 const dom = {
   boardCaption: document.querySelector("#board-caption"),
   boardRoot: document.querySelector("#board-root"),
-  controlsForm: document.querySelector("#controls-form"),
-  editorBackdrop: document.querySelector("#editor-backdrop"),
-  editorCloseButton: document.querySelector("#editor-close-button"),
-  editorRoot: document.querySelector("#editor-root"),
-  editorShell: document.querySelector("#editor-shell"),
+  boardViewport: document.querySelector("#board-viewport"),
+  captureFeedback: document.querySelector("#capture-feedback"),
+  captureForm: document.querySelector("#capture-form"),
+  captureInput: document.querySelector("#capture-input"),
+  detailBackdrop: document.querySelector("#detail-backdrop"),
+  detailCloseButton: document.querySelector("#detail-close-button"),
+  detailRoot: document.querySelector("#detail-root"),
+  detailShell: document.querySelector("#detail-shell"),
   heroMetrics: document.querySelector("#hero-metrics"),
   saveViewButton: document.querySelector("#save-view-button"),
   savedViews: document.querySelector("#saved-views"),
@@ -38,16 +48,17 @@ const dom = {
   showInactive: document.querySelector("#show-inactive"),
   sortBy: document.querySelector("#sort-by"),
   stageTabs: document.querySelector("#stage-tabs"),
+  viewToggle: document.querySelector("#view-toggle"),
 };
 
 init().catch((error) => {
   console.error(error);
-  dom.boardRoot.innerHTML = `<section class="panel empty-state"><h3>Load failed</h3><p>${escapeHtml(error.message)}</p></section>`;
+  dom.boardRoot.innerHTML = `<section class="empty-state"><h2>Load failed</h2><p>${escapeHtml(error.message)}</p></section>`;
 });
 
 async function init() {
   bindEvents();
-  await loadListings();
+  await Promise.all([loadListings(), ensurePretextReady()]);
   render();
 }
 
@@ -65,9 +76,25 @@ async function loadListings() {
 }
 
 function bindEvents() {
-  dom.controlsForm.addEventListener("input", () => {
+  dom.captureForm.addEventListener("submit", handleCaptureSubmit);
+  dom.captureInput.addEventListener("input", () => {
+    state.local.captureDraft = dom.captureInput.value;
+    saveLocalState(state.local);
+  });
+
+  dom.searchInput.addEventListener("input", () => {
     state.local.view.search = dom.searchInput.value.trim();
+    state.local.activeViewKey = null;
+    persistAndRender();
+  });
+
+  dom.sortBy.addEventListener("change", () => {
     state.local.view.sortBy = dom.sortBy.value;
+    state.local.activeViewKey = null;
+    persistAndRender();
+  });
+
+  dom.showInactive.addEventListener("change", () => {
     state.local.view.showInactive = dom.showInactive.checked;
     state.local.activeViewKey = null;
     persistAndRender();
@@ -100,7 +127,9 @@ function bindEvents() {
       return;
     }
 
-    const viewKey = target.dataset.viewKey;
+    const chip = target.closest("[data-view-key]");
+    if (!(chip instanceof HTMLElement)) return;
+    const viewKey = chip.dataset.viewKey;
     if (!viewKey) return;
 
     const builtin = BUILTIN_VIEWS.find((view) => view.key === viewKey);
@@ -125,76 +154,199 @@ function bindEvents() {
     persistAndRender();
   });
 
-  dom.boardRoot.addEventListener("click", (event) => {
+  dom.viewToggle.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    const button = target.closest("[data-view-mode]");
+    if (!(button instanceof HTMLElement)) return;
 
-    const action = target.dataset.action;
-    const listingId = target.dataset.id;
-
-    if (action === "open-editor" && listingId) {
-      state.activeListingId = listingId;
-      renderEditor();
-      return;
-    }
-
-    if (action === "advance-stage" && listingId) {
-      moveListingToStage(listingId, target.dataset.targetStage ?? nextStage(getEvaluation(listingId).pipelineStage));
-    }
+    state.local.viewMode = button.dataset.viewMode ?? "board";
+    persistAndRender();
   });
 
-  dom.boardRoot.addEventListener("dragstart", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const card = target.closest("[data-listing-id]");
-    if (!(card instanceof HTMLElement)) return;
-    state.draggingId = card.dataset.listingId ?? null;
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", state.draggingId ?? "");
-    }
-  });
+  dom.boardRoot.addEventListener("click", handleBoardAction);
+  dom.boardRoot.addEventListener("dblclick", handleBoardDoubleClick);
+  dom.boardRoot.addEventListener("input", handleFieldInput);
+  dom.boardRoot.addEventListener("change", handleFieldCommit);
+  dom.detailRoot.addEventListener("input", handleFieldInput);
+  dom.detailRoot.addEventListener("change", handleFieldCommit);
+  dom.detailRoot.addEventListener("click", handleBoardAction);
 
-  dom.boardRoot.addEventListener("dragover", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const zone = target.closest("[data-stage-dropzone]");
-    if (!(zone instanceof HTMLElement)) return;
-    event.preventDefault();
-  });
+  dom.boardRoot.addEventListener("dragstart", handleDragStart);
+  dom.boardRoot.addEventListener("dragend", clearDragState);
+  dom.boardRoot.addEventListener("dragover", handleDragOver);
+  dom.boardRoot.addEventListener("dragleave", handleDragLeave);
+  dom.boardRoot.addEventListener("drop", handleDrop);
 
-  dom.boardRoot.addEventListener("drop", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    const zone = target.closest("[data-stage-dropzone]");
-    if (!(zone instanceof HTMLElement) || !state.draggingId) return;
-    event.preventDefault();
-    moveListingToStage(state.draggingId, zone.dataset.stageDropzone);
-    state.draggingId = null;
-  });
-
-  dom.editorCloseButton.addEventListener("click", closeEditor);
-  dom.editorBackdrop.addEventListener("click", closeEditor);
-
-  dom.editorRoot.addEventListener("input", handleEditorChange);
-  dom.editorRoot.addEventListener("change", handleEditorChange);
+  dom.detailCloseButton.addEventListener("click", closeDetail);
+  dom.detailBackdrop.addEventListener("click", closeDetail);
+  document.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("resize", queueRender);
 }
 
-function handleEditorChange(event) {
-  const target = event.target;
-  if (
-    !(
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement
-    )
-  ) {
+function handleCaptureSubmit(event) {
+  event.preventDefault();
+  const url = dom.captureInput.value.trim();
+
+  if (!url) {
+    state.captureFeedback = "Paste a Redfin or redf.in URL first.";
+    renderCaptureFeedback();
     return;
   }
 
-  const listingId = state.activeListingId;
+  if (!/redf\.in|redfin\.com/i.test(url)) {
+    state.captureFeedback = "That does not look like a Redfin listing URL yet.";
+    renderCaptureFeedback();
+    return;
+  }
+
+  state.local.captureDraft = url;
+  saveLocalState(state.local);
+  state.captureFeedback = "Refresh workflow opened in a new tab. The pasted URL is saved locally in this header.";
+  renderCaptureFeedback();
+  window.open(REFRESH_WORKFLOW_URL, "_blank", "noopener,noreferrer");
+}
+
+function handleBoardAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const actionElement = target.closest("[data-action]");
+  if (!(actionElement instanceof HTMLElement)) return;
+
+  const action = actionElement.dataset.action;
+  const listingId = actionElement.dataset.id ?? state.activeListingId;
   if (!listingId) return;
 
+  if (action === "toggle-expand") {
+    state.expandedListingId = state.expandedListingId === listingId ? null : listingId;
+    render();
+    return;
+  }
+
+  if (action === "open-detail") {
+    state.activeListingId = listingId;
+    renderDetail();
+    return;
+  }
+
+  if (action === "advance-stage") {
+    moveListingToStage(listingId, actionElement.dataset.targetStage ?? nextStage(getEvaluation(listingId).pipelineStage));
+    return;
+  }
+
+  if (action === "clear-score") {
+    const scoreKey = actionElement.dataset.scoreKey;
+    if (!scoreKey) return;
+    getEvaluation(listingId).scores[scoreKey] = null;
+    persistAndRender();
+  }
+}
+
+function handleBoardDoubleClick(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.closest("input, textarea, select, button, a")) return;
+
+  const card = target.closest("[data-listing-id]");
+  if (!(card instanceof HTMLElement)) return;
+
+  state.activeListingId = card.dataset.listingId ?? null;
+  renderDetail();
+}
+
+function handleFieldInput(event) {
+  const target = getEditableTarget(event.target);
+  if (!target) return;
+
+  const listingId = target.dataset.id ?? state.activeListingId;
+  if (!listingId) return;
+
+  applyFieldMutation(target, listingId);
+  saveLocalState(state.local);
+
+  if (target.dataset.scoreKey) {
+    updateScoreOutputs(listingId, target.dataset.scoreKey, target.value);
+  }
+}
+
+function handleFieldCommit(event) {
+  const target = getEditableTarget(event.target);
+  if (!target) return;
+
+  const listingId = target.dataset.id ?? state.activeListingId;
+  if (!listingId) return;
+
+  applyFieldMutation(target, listingId);
+  persistAndRender();
+}
+
+function handleDragStart(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const card = target.closest("[data-listing-id]");
+  if (!(card instanceof HTMLElement)) return;
+
+  state.draggingId = card.dataset.listingId ?? null;
+  card.classList.add("is-dragging");
+
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", state.draggingId ?? "");
+  }
+}
+
+function clearDragState(event) {
+  state.draggingId = null;
+  document
+    .querySelectorAll(".is-dragging, .stage-column--dragover")
+    .forEach((node) => node.classList.remove("is-dragging", "stage-column--dragover"));
+
+  if (event?.target instanceof HTMLElement) {
+    event.target.closest("[data-listing-id]")?.classList.remove("is-dragging");
+  }
+}
+
+function handleDragOver(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const zone = target.closest("[data-stage-dropzone]");
+  if (!(zone instanceof HTMLElement) || !state.draggingId) return;
+  event.preventDefault();
+  zone.closest("[data-stage-column]")?.classList.add("stage-column--dragover");
+}
+
+function handleDragLeave(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  target.closest("[data-stage-column]")?.classList.remove("stage-column--dragover");
+}
+
+function handleDrop(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const zone = target.closest("[data-stage-dropzone]");
+  if (!(zone instanceof HTMLElement) || !state.draggingId) return;
+
+  event.preventDefault();
+  moveListingToStage(state.draggingId, zone.dataset.stageDropzone);
+  clearDragState();
+}
+
+function handleKeyDown(event) {
+  if (event.key !== "Escape") return;
+
+  if (state.activeListingId) {
+    closeDetail();
+    return;
+  }
+
+  if (state.expandedListingId) {
+    state.expandedListingId = null;
+    render();
+  }
+}
+
+function applyFieldMutation(target, listingId) {
   const evaluation = getEvaluation(listingId);
 
   if (target.dataset.scoreKey) {
@@ -204,13 +356,13 @@ function handleEditorChange(event) {
     evaluation.tags = parseTags(target.value);
   } else if (target.dataset.field) {
     evaluation[target.dataset.field] = normalizeFieldValue(target.dataset.field, target.value);
+  } else {
+    return;
   }
 
   if (evaluation.pipelineStage === "send-to-dad" && !evaluation.sentToDadAt) {
     evaluation.sentToDadAt = todayString();
   }
-
-  persistAndRender();
 }
 
 function normalizeFieldValue(field, rawValue) {
@@ -218,11 +370,12 @@ function normalizeFieldValue(field, rawValue) {
     const numericValue = rawValue === "" ? null : Number(rawValue);
     return Number.isFinite(numericValue) ? numericValue : null;
   }
-  return rawValue === "" ? nullIfDateField(field) : rawValue;
-}
 
-function nullIfDateField(field) {
-  return ["visitDate", "sentToDadAt"].includes(field) ? null : "";
+  if (["visitDate", "sentToDadAt"].includes(field)) {
+    return rawValue || null;
+  }
+
+  return rawValue ?? "";
 }
 
 function moveListingToStage(listingId, stageKey) {
@@ -231,6 +384,14 @@ function moveListingToStage(listingId, stageKey) {
   if (stageKey === "send-to-dad" && !evaluation.sentToDadAt) {
     evaluation.sentToDadAt = todayString();
   }
+
+  state.justMovedId = listingId;
+  window.clearTimeout(pulseTimer);
+  pulseTimer = window.setTimeout(() => {
+    state.justMovedId = null;
+    render();
+  }, 520);
+
   persistAndRender();
 }
 
@@ -247,21 +408,39 @@ function render() {
   syncControls();
 
   const boardState = buildBoardState(state.listings, state.local.evaluations, state.local.view);
-  dom.boardCaption.textContent = `${boardState.merged.length} listings in pipeline`;
-  dom.stageTabs.innerHTML = renderStageTabs(boardState.stageCounts, state.local.view.stageFocus);
-  dom.boardRoot.innerHTML = renderBoard(boardState.columns);
+  const visibleIds = new Set(boardState.merged.map((listing) => listing.id));
+  if (state.expandedListingId && !visibleIds.has(state.expandedListingId)) {
+    state.expandedListingId = null;
+  }
 
-  if (boardState.merged.length === 0) {
-    dom.boardRoot.innerHTML = `<section class="panel empty-state"><h3>No houses match this view</h3><p>Widen the search, show dormant listings again, or reset the stage focus.</p></section>`;
+  const measuredColumns = buildMeasuredColumns(boardState.columns, {
+    boardWidth: getBoardViewportWidth(),
+    expandedListingId: state.expandedListingId,
+    viewMode: state.local.viewMode,
+  });
+
+  dom.boardRoot.dataset.viewMode = state.local.viewMode;
+  dom.stageTabs.innerHTML = renderStageTabs(boardState.stageCounts, state.local.view.stageFocus);
+  dom.boardCaption.textContent = buildBoardCaption(boardState.merged);
+
+  if (boardState.merged.length === 0 && state.local.viewMode !== "map") {
+    dom.boardRoot.innerHTML = `<section class="empty-state"><h2>No houses match this lens</h2><p>Widen the search, show pending homes again, or switch back to all stages.</p></section>`;
+  } else {
+    dom.boardRoot.innerHTML = renderBoard(measuredColumns, {
+      expandedListingId: state.expandedListingId,
+      justMovedId: state.justMovedId,
+      viewMode: state.local.viewMode,
+    });
   }
 
   renderSavedViews();
-  renderHeroMetrics(boardState.merged, boardState.stageCounts);
-  renderEditor();
+  renderMetrics(boardState.merged, boardState.stageCounts);
+  renderCaptureFeedback();
+  renderDetail();
 }
 
 function renderSavedViews() {
-  const builtinMarkup = BUILTIN_VIEWS.map(
+  const builtin = BUILTIN_VIEWS.map(
     (view) => `
       <button class="view-chip ${state.local.activeViewKey === view.key ? "is-active" : ""}" type="button" data-view-key="${view.key}">
         ${escapeHtml(view.name)}
@@ -269,7 +448,7 @@ function renderSavedViews() {
     `,
   );
 
-  const savedMarkup = state.local.savedViews.flatMap((view) => [
+  const saved = state.local.savedViews.flatMap((view) => [
     `
       <button class="view-chip ${state.local.activeViewKey === view.id ? "is-active" : ""}" type="button" data-view-key="${view.id}">
         ${escapeHtml(view.name)}
@@ -277,88 +456,148 @@ function renderSavedViews() {
     `,
     `
       <button class="view-chip view-chip--delete" type="button" data-delete-view="${view.id}">
-        x
+        Remove
       </button>
     `,
   ]);
 
-  dom.savedViews.innerHTML = [...builtinMarkup, ...savedMarkup].join("");
+  dom.savedViews.innerHTML = [...builtin, ...saved].join("");
 }
 
-function renderHeroMetrics(listings, stageCounts) {
+function renderMetrics(listings, stageCounts) {
+  const activeCount = listings.filter((listing) => !isInactiveStatus(listing.status)).length;
   const scoredCount = listings.filter((listing) => Number.isFinite(listing.compositeScore)).length;
-  const dadCount = stageCounts["send-to-dad"] ?? 0;
-  const aboveRangeCount = listings.filter((listing) => listing.aboveRange).length;
+  const finalistCount = stageCounts["send-to-dad"] ?? 0;
   const fastestCommute = listings
     .map((listing) => listing.commuteMinutes)
     .filter((value) => Number.isFinite(value))
     .sort((left, right) => left - right)[0];
+  const strongestFit = listings
+    .map((listing) => listing.compositeScore)
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => right - left)[0];
 
   const metrics = [
     {
-      label: "Tracked homes",
-      value: String(listings.length),
-      copy: `${listings.filter((listing) => !isInactiveStatus(listing.status)).length} active opportunities still on the board`,
+      label: "Active pool",
+      value: String(activeCount),
+      copy: `${listings.length} tracked houses total`,
     },
     {
       label: "Scored",
       value: String(scoredCount),
-      copy: "Listings with all four fit dimensions completed",
-    },
-    {
-      label: "Budget watch",
-      value: String(aboveRangeCount),
-      copy: `Homes above the $550k reference band`,
+      copy: "All four fit dimensions completed",
     },
     {
       label: "Fastest commute",
       value: Number.isFinite(fastestCommute) ? `${fastestCommute} min` : "Unset",
-      copy: Number.isFinite(fastestCommute) ? `Manual commute input to ${IBM_REFERENCE}` : `Add commute times to compare against ${IBM_REFERENCE}`,
+      copy: `Drive target: ${IBM_REFERENCE}`,
     },
     {
-      label: "Finalists",
-      value: String(dadCount),
-      copy: "Listings already promoted into the dad packet lane",
+      label: "Best fit",
+      value: Number.isFinite(strongestFit) ? formatMaybeScore(strongestFit) : "--",
+      copy: finalistCount ? `${finalistCount} in Send to Dad` : "No finalists promoted yet",
     },
     {
-      label: "Data refresh",
+      label: "Refreshed",
       value: state.updatedAt ? relativeTime(state.updatedAt) : "n/a",
-      copy: state.updatedAt ? new Date(state.updatedAt).toLocaleString() : "No refresh timestamp yet",
+      copy: state.updatedAt ? new Date(state.updatedAt).toLocaleString() : "No refresh timestamp",
     },
   ];
 
   dom.heroMetrics.innerHTML = metrics
     .map(
       (metric) => `
-        <article class="metric">
-          <span class="metric__label">${escapeHtml(metric.label)}</span>
-          <span class="metric__value">${escapeHtml(metric.value)}</span>
-          <span class="metric__copy">${escapeHtml(metric.copy)}</span>
+        <article class="metric-pill">
+          <span class="metric-pill__label">${escapeHtml(metric.label)}</span>
+          <strong>${escapeHtml(metric.value)}</strong>
+          <p>${escapeHtml(metric.copy)}</p>
         </article>
       `,
     )
     .join("");
 }
 
-function renderEditor() {
-  const activeListing =
+function renderCaptureFeedback() {
+  dom.captureFeedback.textContent = state.captureFeedback;
+}
+
+function renderDetail() {
+  const listing =
     state.listings
-      .map((listing) => mergeListingWithEvaluation(listing, state.local.evaluations[listing.id]))
-      .find((listing) => listing.id === state.activeListingId) ?? null;
-  dom.editorRoot.innerHTML = renderEditorPanel(activeListing);
-  dom.editorShell.dataset.open = activeListing ? "true" : "false";
-  dom.editorBackdrop.hidden = !activeListing;
+      .map((item) => mergeListingWithEvaluation(item, state.local.evaluations[item.id]))
+      .find((item) => item.id === state.activeListingId) ?? null;
+
+  if (!listing) {
+    dom.detailRoot.innerHTML = renderDetailPanel(null);
+    dom.detailShell.dataset.open = "false";
+    dom.detailBackdrop.hidden = true;
+    return;
+  }
+
+  const detailed = {
+    ...listing,
+    detailLayout: measureDetailLayout(listing),
+  };
+
+  dom.detailRoot.innerHTML = renderDetailPanel(detailed);
+  dom.detailShell.dataset.open = "true";
+  dom.detailBackdrop.hidden = false;
 }
 
 function syncControls() {
   dom.searchInput.value = state.local.view.search;
   dom.sortBy.value = state.local.view.sortBy;
   dom.showInactive.checked = state.local.view.showInactive;
+  dom.captureInput.value = state.local.captureDraft ?? "";
+
+  dom.viewToggle.querySelectorAll("[data-view-mode]").forEach((button) => {
+    if (!(button instanceof HTMLElement)) return;
+    button.classList.toggle("is-active", button.dataset.viewMode === state.local.viewMode);
+  });
 }
 
-function closeEditor() {
+function closeDetail() {
   state.activeListingId = null;
-  renderEditor();
+  renderDetail();
+}
+
+function queueRender() {
+  window.cancelAnimationFrame(renderFrame);
+  renderFrame = window.requestAnimationFrame(() => {
+    render();
+  });
+}
+
+function getBoardViewportWidth() {
+  return Math.max(320, Math.floor(dom.boardViewport.clientWidth || window.innerWidth - 32));
+}
+
+function buildBoardCaption(listings) {
+  if (!listings.length) return "No listings visible";
+  const activeCount = listings.filter((listing) => !listing.inactive).length;
+  return `${listings.length} visible · ${activeCount} active · sorted by ${state.local.view.sortBy.replace("-", " ")}`;
+}
+
+function updateScoreOutputs(listingId, scoreKey, nextValue) {
+  const text = nextValue ? String(nextValue) : "Unset";
+  document
+    .querySelectorAll(`[data-live-score-output="${listingId}--${scoreKey}"]`)
+    .forEach((node) => {
+      node.textContent = text;
+    });
+}
+
+function getEditableTarget(target) {
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  ) {
+    return target;
+  }
+
+  return null;
 }
 
 function todayString() {
