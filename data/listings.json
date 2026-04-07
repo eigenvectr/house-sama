@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-04T14:29:20.575Z",
+  "updatedAt": "2026-04-07T15:02:48.818Z",
   "listings": [
     {
       "id": "185452504",
@@ -250,10 +250,10 @@
         "https://ssl.cdn-redfin.com/photo/175/bigphoto/496/202613496_40_0.jpg",
         "https://ssl.cdn-redfin.com/photo/175/bigphoto/496/202613496_41_0.jpg"
       ],
-      "listedAt": "2026-03-28T14:29:24.561Z",
+      "listedAt": "2026-03-31T15:02:52.579Z",
       "reviewedAt": "2026-03-25T14:32:07.000Z",
       "addedAt": "2026-03-31T05:39:38.812Z",
-      "refreshedAt": "2026-04-04T14:29:20.575Z",
+      "refreshedAt": "2026-04-07T15:02:48.818Z",
       "commuteMinutesHint": 18
     }
   ]
