@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-07T15:02:48.818Z",
+  "updatedAt": "2026-04-08T15:04:49.083Z",
   "listings": [
     {
       "id": "185452504",
@@ -14,7 +14,7 @@
       "lat": 42.72940444946289,
       "lng": -73.95137786865234,
       "status": "active",
-      "price": 765826.02,
+      "price": 782184.19,
       "beds": null,
       "baths": null,
       "sqft": null,
@@ -26,7 +26,7 @@
       "listedAt": null,
       "reviewedAt": null,
       "addedAt": "2026-03-31T06:07:14.134Z",
-      "refreshedAt": "2026-03-31T06:18:06.972Z",
+      "refreshedAt": "2026-04-08T15:04:49.083Z",
       "commuteMinutesHint": 22
     },
     {
@@ -250,10 +250,10 @@
         "https://ssl.cdn-redfin.com/photo/175/bigphoto/496/202613496_40_0.jpg",
         "https://ssl.cdn-redfin.com/photo/175/bigphoto/496/202613496_41_0.jpg"
       ],
-      "listedAt": "2026-03-31T15:02:52.579Z",
+      "listedAt": "2026-04-01T15:04:53.340Z",
       "reviewedAt": "2026-03-25T14:32:07.000Z",
       "addedAt": "2026-03-31T05:39:38.812Z",
-      "refreshedAt": "2026-04-07T15:02:48.818Z",
+      "refreshedAt": "2026-04-08T15:04:49.083Z",
       "commuteMinutesHint": 18
     }
   ]
