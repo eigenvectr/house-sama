@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-31T15:14:45.247Z",
+  "updatedAt": "2026-06-06T15:09:13.803Z",
   "listings": [
     {
       "id": "185452504",
@@ -14,7 +14,7 @@
       "lat": 42.72940444946289,
       "lng": -73.95137786865234,
       "status": "active",
-      "price": 748863.42,
+      "price": 729397.21,
       "beds": null,
       "baths": null,
       "sqft": null,
@@ -26,7 +26,7 @@
       "listedAt": null,
       "reviewedAt": null,
       "addedAt": "2026-03-31T06:07:14.134Z",
-      "refreshedAt": "2026-05-31T15:14:45.247Z",
+      "refreshedAt": "2026-06-06T15:09:13.803Z",
       "commuteMinutesHint": 22
     },
     {
